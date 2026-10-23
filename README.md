@@ -2,9 +2,36 @@
 
 Clinic booking API (Express + Postgres) and the React page that uses it.
 
-## Endpoints
+## Authentication policy
 
-All requests need the `X-API-Key` header. Errors are `{ "error": "..." }`.
+There are two ways to reach the same booking logic:
+
+| Caller | Paths | Authentication |
+| --- | --- | --- |
+| API client / grader | `/reset`, `/slots`, `/bookings`, `/bookings/:id` | **`x-api-key` header required** on every request |
+| Browser page | `/web/slots`, `/web/bookings`, `/web/bookings/:id` | Server-side bridge; the browser never sees a key |
+
+- The key comes from the server environment variable `API_KEY`. It is compared with
+  `crypto.timingSafeEqual`, never logged, and never included in the React bundle.
+- A missing, empty, wrong, or unconfigured key returns `401` with
+  `{ "error": "invalid or missing API key" }`.
+- `GET /slots` **is protected** by design: the assignment requires the key on every API
+  request, including reads.
+- The browser page calls `/web/*`. Those routes live in the same Express process, where
+  `webBridge` adds the key to the internal request. This avoids shipping a permanent
+  shared secret to every visitor. `/web/reset` is blocked so the UI cannot wipe data.
+- The `/web/*` routes are public in the same sense as any booking website: anyone who can
+  open the page can view slots and book. `GET /web/bookings?email=` uses an email as the
+  lookup key (the assignment's data model has no patient accounts). A production clinic
+  would replace that with real user authentication.
+
+If you send `GET /slots` without a header, the `401` is expected. Add:
+
+```
+x-api-key: <the value of API_KEY on the server>
+```
+
+## Endpoints
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -31,53 +58,74 @@ npm run db:init             # apply schema.sql and seed sample slots
 npm run dev                 # API on http://localhost:3000
 ```
 
-Generate a key with `openssl rand -hex 32`. The React page runs against the API with:
+Generate a key with `openssl rand -hex 32`. Only the server reads it.
+
+To run the React page:
 
 ```bash
-npm run build               # builds client/dist
+npm run build               # compiles the server to dist/ and builds client/dist
 # then open http://localhost:3000
 
-# or for hot reload:
-npm --prefix client run dev # http://localhost:5173, proxied to the API
+# or for hot reload (the Vite proxy forwards /web to the API):
+npm --prefix client run dev # http://localhost:5173
 ```
-
-The browser bundle embeds `API_KEY` at build time (`client/vite.config.ts`), so rebuild after changing it.
 
 ## Test
 
-With the server running:
-
 ```bash
-npm run check
+npm run test:auth      # missing / invalid / valid keys, bridge behaviour (no DB)
+npm run typecheck
+npm run build
+
+npm run check          # integration checks against a running server
 ```
 
-This exercises every level: auth, validation, a 20-way race for one slot, cancellation, idempotent replays, pagination and rate limiting.
+`npm run test:auth` uses a synthetic key and never touches the database. `npm run check`
+talks to the running server (default `http://localhost:3000`), uses `API_KEY` from your
+environment, **resets the slots and bookings**, and covers a 20-way race, cancellation,
+idempotent replays, pagination and rate limiting.
 
 ## Deploy (Render)
 
 1. Push the repository to GitHub.
-2. In Render: **New → Web Service**, connect the repo. `render.yaml` already defines the build and start commands.
+2. In Render: **New → Web Service** (or Blueprint), connect the repo.
+   - Build command: `npm install && npm run build`
+   - Start command: `npm start` (runs `node dist/server.js`)
 3. Set environment variables:
-   - `DATABASE_URL` — the Neon connection string (same as local)
-   - `API_KEY` — the key you generated
-4. Deploy. Render runs `npm install && npm run build` (which builds the React page) and starts with `npm start`.
-5. Check `https://<your-url>/health`, then send the deployed URL and `API_KEY` with your submission.
+   - `DATABASE_URL` — the Neon connection string
+   - `API_KEY` — the server-side API key
+4. Deploy. The build compiles the API **and** the React page; `/` serves the page and
+   `/health` reports the service status.
+5. If `/slots` returns `401`, check that the request sends `x-api-key` and that Render has
+   `API_KEY` set to exactly that value. The server logs a warning at startup when
+   `API_KEY` is missing.
 
-Any host works the same way: build the client, run `npm start`, provide both variables, and point `DATABASE_URL` at a Postgres database that has `schema.sql` applied (`npm run db:init` once).
+Any host works the same way: `npm run build`, `npm start`, provide both variables, and
+point `DATABASE_URL` at a Postgres database that has `schema.sql` applied
+(`npm run db:init` once).
+
+### Security note
+
+Older builds embedded the API key in the browser bundle. After switching to the `/web`
+bridge, rotate `API_KEY` (GitHub/Render/local `.env`) so the previously published value
+is no longer valid. `.env` and `client/dist/` are gitignored; only placeholders belong in
+`.env.example`.
 
 ## Layout
 
 ```
 src/
-  app.ts              Express app, static client, error handler
-  server.ts           entry point
-  db.ts               pg pool
-  serialize.ts        DB row -> API JSON shapes
-  rateLimit.ts        per-email attempt window
-  middleware/apiKey.ts
-  routes/slots.ts     /reset, /slots
-  routes/bookings.ts  /bookings
-client/               React + Vite page (built to client/dist)
-schema.sql            tables and indexes
-scripts/check.ts      end-to-end checks
+  app.ts                 Express app, /web bridge, static client, error handler
+  server.ts              entry point
+  db.ts                  pg pool
+  serialize.ts           DB row -> API JSON shapes
+  rateLimit.ts           per-email attempt window
+  middleware/apiKey.ts   x-api-key check (timing-safe)
+  middleware/webBridge.ts server-side key injection for browser requests
+  routes/slots.ts        /reset, /slots
+  routes/bookings.ts     /bookings
+client/                  React + Vite page (built to client/dist)
+schema.sql               tables and indexes
+scripts/auth.test.ts     key and bridge tests (node:test)
+scripts/check.ts         end-to-end checks
 ```

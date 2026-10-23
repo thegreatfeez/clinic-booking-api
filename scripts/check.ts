@@ -70,6 +70,17 @@ async function main() {
     }
   });
 
+  console.log("\nWeb bridge");
+  const webList = await call("GET", "/web/slots", { key: null });
+  check("browser bridge serves slots without a client key", webList.status === 200);
+  check("browser bridge returns the same slot shape", Array.isArray(webList.body?.slots));
+
+  const webReset = await call("POST", "/web/reset", {
+    key: null,
+    body: { slots: [] }
+  });
+  check("browser bridge never exposes /reset", webReset.status === 404);
+
   console.log("\nLevel 1");
   const list = await call("GET", "/slots");
   check("GET /slots returns 200", list.status === 200);

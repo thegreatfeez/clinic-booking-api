@@ -2,14 +2,15 @@
   "name": "clinic-booking-api",
   "version": "1.0.0",
   "description": "Clinic booking API and web page for the Koya assessment",
- "scripts": {
-  "dev": "tsx watch src/server.ts",
-  "build": "tsc",
-  "start": "node dist/server.js",
-  "db:init": "tsx src/init-db.ts",
-  "check": "tsx scripts/check.ts",
-  "typecheck": "tsc --noEmit"
-},
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc && npm --prefix client install --include=dev && npm --prefix client run build",
+    "start": "node dist/server.js",
+    "db:init": "tsx src/init-db.ts",
+    "check": "tsx scripts/check.ts",
+    "test:auth": "node --import tsx --test scripts/auth.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

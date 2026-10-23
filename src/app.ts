@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import type { ErrorRequestHandler } from "express";
+import { webBridge } from "./middleware/webBridge.js";
 import bookingsRouter from "./routes/bookings.js";
 import slotsRouter from "./routes/slots.js";
 
@@ -16,6 +17,10 @@ app.get("/health", (req, res) => {
 
 app.use(slotsRouter);
 app.use(bookingsRouter);
+
+app.use("/web", webBridge);
+app.use("/web", slotsRouter);
+app.use("/web", bookingsRouter);
 
 const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../client/dist");
 app.use(express.static(clientDist));

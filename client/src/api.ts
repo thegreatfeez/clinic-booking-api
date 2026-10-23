@@ -43,7 +43,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
     headers: {
       Accept: "application/json",
-      "X-API-Key": __API_KEY__,
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...init.headers
     }
@@ -70,12 +69,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export async function listSlots(signal?: AbortSignal): Promise<Slot[]> {
-  const data = await request<{ slots: Slot[] }>("/slots", { signal });
+  const data = await request<{ slots: Slot[] }>("/web/slots", { signal });
   return data.slots;
 }
 
 export async function createBooking(input: NewBooking): Promise<Booking> {
-  return request<Booking>("/bookings", {
+  return request<Booking>("/web/bookings", {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -94,9 +93,9 @@ export async function listBookings(
     search.set("cursor", params.cursor);
   }
 
-  return request<BookingPage>(`/bookings?${search.toString()}`, { signal });
+  return request<BookingPage>(`/web/bookings?${search.toString()}`, { signal });
 }
 
 export async function cancelBooking(id: string): Promise<Booking> {
-  return request<Booking>(`/bookings/${encodeURIComponent(id)}`, { method: "DELETE" });
+  return request<Booking>(`/web/bookings/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
